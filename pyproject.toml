@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fffuuu"
+version = "0.1.0"
+description = "Who do you call when Slack is the thing that's down?"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = []   # zero runtime deps - stdlib only
+authors = [
+  {name = "Fabio \"frusp\" Fichera"},
+]
+
+[project.scripts]
+fffuuu = "fffuuu.cli:main"
+fck    = "fffuuu.cli:main"
+sev    = "fffuuu.cli:main"
+
+[project.urls]
+Repository = "https://github.com/frusp/fffuuu"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fffuuu*"]
