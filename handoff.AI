@@ -1,0 +1,206 @@
+# fffuuu — AI Agent Handoff
+
+This file is the authoritative context document for any AI agent continuing
+work on this project. Read it before touching any code. Update it before
+ending any session.
+
+---
+
+## What this project is
+
+**fffuuu** is an offline-first CLI tool for SRE emergency contacts.
+
+The core premise: during a SEV-0, the tools you'd normally use to find help
+(PagerDuty, Slack, Confluence, OpsGenie) are often part of the blast radius.
+This tool reads a local TOML file and prints phone numbers. No network. No
+login. No browser.
+
+Inspired by a talk by Alberto Massidda about an internal tool with the same
+philosophy.
+
+Initial implementation by Fabio "frusp" Fichera and Claude Sonnet 4.6.
+This project is AI-assisted — agents are first-class contributors.
+
+Installed as three aliases — identical behaviour, different tone for 3am:
+- `fffuuu` — canonical name
+- `fck` — when you need to express yourself
+- `sev` — professional mode
+
+---
+
+## Absolute constraints — never break these
+
+1. **Zero runtime dependencies.** stdlib only. No `rich`, no `click`, no
+   `tomli`, no `requests`. If it needs a third-party package, reconsider the
+   feature.
+2. **Python 3.11+ only.** `tomllib` (stdlib since 3.11) is used for TOML
+   parsing. Do not add a `tomli` fallback — it would be a dependency.
+3. **Data file is human-readable.** `~/.fff/contacts.toml` must survive being
+   `cat`'d in a terminal at 3am. The custom TOML writer in `store.py` exists
+   specifically to preserve this format. Don't replace it with a generic
+   serialiser that collapses whitespace or reorders fields.
+4. **No network calls at runtime** except the explicit `fff sync` command,
+   which the user invokes knowingly. Every other command must work fully
+   offline.
+
+---
+
+## Repository layout
+
+```
+fffuuu/                 ← repo root (also the PyPI package name)
+├── fffuuu/             ← Python package
+│   ├── __init__.py     module docstring only
+│   ├── __main__.py     enables `python -m fffuuu`
+│   ├── cli.py          argument parsing + main() entry point
+│   ├── commands.py     one cmd_* function per subcommand
+│   ├── display.py      all terminal output / ANSI formatting
+│   └── store.py        read/write contacts.toml + config.toml
+├── docs/
+│   └── sev0-walkthrough.md  realistic SEV-0 usage narrative
+├── pyproject.toml
+├── CHANGELOG.md
+├── README.md
+├── LICENSE             MIT
+└── handoff.AI          ← this file
+```
+
+---
+
+## Architecture
+
+### Module responsibilities
+
+| Module | Does | Does not |
+|---|---|---|
+| `cli.py` | Parse argv, route to commands | Any business logic |
+| `commands.py` | Implement each subcommand | Formatting, I/O details |
+| `display.py` | All print/ANSI output | Any data access |
+| `store.py` | Read/write TOML files, paths, defaults | Any output |
+
+This separation is intentional and load-bearing. Keep it.
+
+### Data flow
+
+```
+argv → cli.main() → argparse → cmd_*(args) → store.load_contacts()
+                                            ↓
+                                     display.print_*()
+```
+
+### Invocation alias / tone
+
+`cli._invocation_name()` reads `sys.argv[0]` to detect which alias was used.
+This affects only the `--help` description text. All three aliases (`fffuuu`,
+`fck`, `sev`) call the same `main()` and produce identical output.
+
+### Data directory
+
+Default: `~/.fff/`
+Override: `FFF_DIR` environment variable
+
+Two files live there:
+- `contacts.toml` — the contact list (`[[contact]]` array of tables)
+- `config.toml` — optional sync config (`[sync]` section)
+
+`store.init_if_needed()` creates both with example data on first use.
+Most commands call this automatically (except `init` and `where`).
+
+### TOML write strategy
+
+Python's `tomllib` is read-only. `store.py` implements a minimal hand-rolled
+TOML writer (`save_contacts`) that preserves the human-friendly column-aligned
+format. This is not a bug — it is the feature. Do not replace it.
+
+### Colour output
+
+`display.py` checks `NO_COLOR`, `FFF_NO_COLOR`, and `sys.stdout.isatty()` at
+import time and sets module-level constants (`BOLD`, `RED`, etc.) to either
+ANSI escape codes or empty strings. All formatting goes through these
+constants — no conditional checks scattered through the code.
+
+---
+
+## Current state (as of 2026-06-17)
+
+- Version: **0.1.0** (initial release)
+- All commands implemented and working
+- No test suite yet
+- Not yet published to PyPI
+- GitHub remote: https://github.com/frusp/fffuuu
+
+### What exists
+
+All commands from the README are implemented:
+`oncall`, `list`, `team`, `teams`, `find`, `add`, `set-oncall`,
+`clear-oncall`, `import`, `export`, `sync`, `edit`, `where`, `init`
+
+### What's missing / obvious next steps
+
+- **Tests** — no test suite at all. Good first task for a new agent.
+  Suggested approach: use `tmp_path` (pytest fixture) + `FFF_DIR` env var
+  to isolate each test. No mocking needed — the store layer is trivially
+  parameterisable via env var.
+- **PyPI publish** — the README has a publish checklist. Needs a PyPI account
+  and a `PYPI_TOKEN` secret on GitHub.
+- **GitHub Actions** — no CI yet. A simple workflow: `pip install .` + run
+  tests on push.
+- **`display.py` is not tested at all** — consider a `--plain` flag or
+  testing with `NO_COLOR=1` to make output assertions simple.
+
+---
+
+## Development setup
+
+```bash
+git clone https://github.com/frusp/fffuuu
+cd fffuuu
+pip install -e .          # requires pip >= 22 + setuptools >= 68 + Python 3.11+
+
+# test with an isolated data dir
+FFF_DIR=/tmp/fff-test fffuuu init
+FFF_DIR=/tmp/fff-test fck oncall
+```
+
+**Note:** The development machine this was built on runs Python 3.10 / pip 22
+/ setuptools 59 (WSL). These are all below the project's requirements.
+The code is correct — the environment is the issue. Use Python 3.11+ to
+develop and test.
+
+---
+
+## Decisions made and why
+
+| Decision | Reason |
+|---|---|
+| Package dir named `fffuuu/` (not `fff/`) | Consistency with PyPI name and repo name |
+| Flat layout (not `src/`) | Simple CLI tool, no library consumers, no test suite yet |
+| Three entry-point aliases | Different teams have different cultures; the tool should meet them where they are |
+| `tomllib` (stdlib) instead of `tomli` | Avoids adding any dependency, even a dev one |
+| No `click` / `typer` | Would be a runtime dependency; `argparse` is sufficient |
+| `~/.fff/` data dir (not `~/.config/fffuuu/`) | Shorter to type under stress; SRE muscle memory |
+| `FFF_DIR` env var | Enables isolated testing without mocking |
+
+---
+
+## Conventions
+
+- All output goes through `display.py` — never `print()` directly in
+  `commands.py` except for raw data output (`cmd_where`, `cmd_export`).
+- Command functions are named `cmd_<subcommand>` and always return an `int`
+  exit code (0 = success, 1 = error).
+- `store.load_contacts()` returns `[]` when the file doesn't exist (not an
+  error). Commands decide what to do with an empty list.
+- No comments unless the why is non-obvious. No docstrings on `cmd_*`
+  functions — the `--help` string is the documentation.
+
+---
+
+## Updating this file
+
+After each session, update:
+- **Current state** section (version, what exists, what's missing)
+- **Decisions made** table if new architectural choices were made
+- The date in the heading above
+
+Keep it factual and terse. Future agents need facts, not narrative.

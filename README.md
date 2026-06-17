@@ -1,6 +1,7 @@
 # fffuuu
 
 **Offline-first SRE emergency contact directory.**
+-Inspired by a talk by Alberto Massidda.
 
 > When your infra is on fire, Confluence won't load, PagerDuty is down,
 > and Slack is the thing that's broken — this still works.
@@ -222,11 +223,15 @@ twine upload dist/*
 
 ---
 
-## Authors
+## AI development
 
-Coauthored by Fabio "frusp" Fichera and Claude (Anthropic).
+This project is developed with AI coding agents. [`handoff.AI`](handoff.AI)
+is the context file that every agent reads at the start of a session and
+updates at the end. It contains the architecture, constraints, decisions, and
+current state of the project — everything a new agent needs to pick up where
+the last one left off.
 
-Inspired by a talk by Alberto Massidda.
+If you're an AI agent working on this repo: **start with `handoff.AI`**.
 
 ## License
 
